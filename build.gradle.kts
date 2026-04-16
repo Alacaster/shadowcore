@@ -1,5 +1,6 @@
 plugins {
     java
+    id("xyz.jpenilla.run-paper") version "2.3.1"
 }
 
 group = "dev.shadowcore"
@@ -29,4 +30,8 @@ tasks.processResources {
     filesMatching("plugin.yml") {
         expand("version" to version)
     }
+}
+
+tasks.runServer {
+    minecraftVersion("1.21.4")
 }
