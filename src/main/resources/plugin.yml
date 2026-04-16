@@ -1,0 +1,22 @@
+name: ShadowCoreEvent
+version: ${version}
+main: dev.shadowcore.ShadowCorePlugin
+api-version: '1.21'
+authors: [ShadowCore]
+softdepend: [ProtocolLib]
+commands:
+  lprofile:
+    description: Manage local profiles.
+    usage: /lprofile <create|switch|list|rename|delete|status|logout|main|setlimit|adminrename>
+    permission: shadowcore.use
+  shadow:
+    description: Manage admin shadow sessions.
+    usage: /shadow <target|logout|status>
+    permission: shadowcore.use
+permissions:
+  shadowcore.use:
+    default: true
+  shadowcore.admin:
+    default: op
+  shadowcore.opbypass:
+    default: op
