@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     java
     id("xyz.jpenilla.run-paper") version "2.3.1"
@@ -32,6 +34,27 @@ dependencies {
 }
 
 val runServerPluginsDir = layout.buildDirectory.dir("run/plugins")
+val runServerDir = layout.buildDirectory.dir("run")
+
+fun ensureRunServerConfiguration(runDir: java.io.File) {
+    runDir.mkdirs()
+
+    val eulaFile = runDir.resolve("eula.txt")
+    eulaFile.writeText("eula=true\n")
+
+    val propertiesFile = runDir.resolve("server.properties")
+    val properties = Properties()
+    if (propertiesFile.exists()) {
+        propertiesFile.inputStream().use { input ->
+            properties.load(input)
+        }
+    }
+    properties["view-distance"] = "2"
+    properties["simulation-distance"] = "2"
+    propertiesFile.outputStream().use { output ->
+        properties.store(output, "Managed by Gradle runServer task")
+    }
+}
 
 val installProtocolLibForRunServer by tasks.registering {
     group = "run paper"
@@ -78,4 +101,7 @@ tasks.processResources {
 tasks.runServer {
     dependsOn(installProtocolLibForRunServer)
     minecraftVersion("1.21.11")
+    doFirst {
+        ensureRunServerConfiguration(runServerDir.get().asFile)
+    }
 }
