@@ -28,6 +28,7 @@ public final class RuntimeSession {
     private String appliedRuntimeKey;
     private String appliedIdentityKey;
     private String appliedSpectatorKey;
+    private PlayerSnapshot preShadowSnapshot;
 
     public RuntimeSession(final UUID baseUuid) {
         this.baseUuid = baseUuid;
@@ -52,6 +53,8 @@ public final class RuntimeSession {
     public void appliedIdentityKey(final String v) { this.appliedIdentityKey = v; }
     public String appliedSpectatorKey() { return appliedSpectatorKey; }
     public void appliedSpectatorKey(final String v) { this.appliedSpectatorKey = v; }
+    public PlayerSnapshot preShadowSnapshot() { return preShadowSnapshot; }
+    public void preShadowSnapshot(final PlayerSnapshot snapshot) { this.preShadowSnapshot = snapshot; }
 
     public boolean isIdle() { return phase == Phase.IDLE || phase == Phase.MOUNTED; }
 

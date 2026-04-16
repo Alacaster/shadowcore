@@ -183,7 +183,12 @@ public final class SessionAuthority {
         // Save current profile, load new one
         final ProfileIdentity currentId = router.get(e.actor());
         final ProfileIdentity newId = ProfileIdentity.local(e.actor(), e.profileUuid(), e.suffix());
-        dataBridge.switchProfile(player, currentId, newId);
+        if (!dataBridge.switchProfile(player, currentId, newId)) {
+            rt.phase(RuntimeSession.Phase.IDLE);
+            rt.clearPending();
+            e.response().reply("<red>Failed to load that profile's data.</red>");
+            return;
+        }
         router.set(e.actor(), newId);
         db.setActiveProfile(e.actor(), e.profileUuid());
         db.touchProfileMounted(e.profileUuid());
@@ -230,7 +235,10 @@ public final class SessionAuthority {
         }
         final ProfileIdentity currentId = router.get(e.actor());
         final ProfileIdentity mainId = ProfileIdentity.main(e.actor());
-        dataBridge.switchProfile(player, currentId, mainId);
+        if (!dataBridge.switchProfile(player, currentId, mainId)) {
+            e.response().reply("<red>Failed to load main profile data.</red>");
+            return;
+        }
         router.set(e.actor(), mainId);
         db.setActiveProfile(e.actor(), null);
         presentation.applyRealIdentity(player);
@@ -298,7 +306,8 @@ public final class SessionAuthority {
     private void onShadowNameResolved(final EngineEvent.ShadowNameResolved e) {
         final Player actor = online(e.actor(), e.response()); if (actor == null) return;
         final RuntimeSession rt = runtime(e.actor());
-        if (!e.targetName().equalsIgnoreCase(rt.pendingTargetKey())) return;
+        if (rt.pendingTargetKey() == null
+            || !Naming.normalizeKey(e.targetName()).equalsIgnoreCase(rt.pendingTargetKey())) return;
         final String targetKey = Naming.normalizeKey(e.targetName());
         final boolean selfTarget = targetKey.equalsIgnoreCase(Naming.normalizeKey(accountName(e.actor(), e.actorName())));
 
@@ -310,12 +319,14 @@ public final class SessionAuthority {
 
         // Save admin's current profile data before loading target data
         dataBridge.saveToProfile(actor, router.get(e.actor()));
+        rt.preShadowSnapshot(PlayerSnapshot.capture(actor));
 
         // Backup admin's base .dat before shadow overwrites it
         dataBridge.backupAdminDat(e.actor());
 
         // Resolve the target to a .dat file UUID
         UUID targetUuid = null;
+        boolean targetDataLoaded = selfTarget;
         if (!selfTarget) {
             // Resolution chain: known player → local profile → Mojang cache
             targetUuid = db.resolveTargetUuid(e.targetName()).orElse(null);
@@ -333,7 +344,7 @@ public final class SessionAuthority {
                     // Target has never joined — create fresh data for them
                     dataBridge.createFreshTargetData(actor, targetUuid);
                 }
-                dataBridge.loadShadowTarget(actor, targetUuid);
+                targetDataLoaded = dataBridge.loadShadowTarget(actor, targetUuid);
             }
             // If targetUuid is still null, admin keeps their own state — shadow is visual-only
         }
@@ -349,6 +360,7 @@ public final class SessionAuthority {
 
         // Engage visual puppet
         final boolean visual = engageProtocol(actor, e.targetName(), selfTarget, texValue, texSig);
+        if (!selfTarget) env.forceSpectator(actor);
 
         rt.phase(RuntimeSession.Phase.MOUNTED);
         rt.clearPending();
@@ -359,7 +371,7 @@ public final class SessionAuthority {
                 ? "<green>Self-shadow engaged. You are invisible. Use</green> <yellow>/shadow logout</yellow><green>.</green>"
                 : "<green>Self-shadow data loaded, visual failed. Use</green> <yellow>/shadow logout</yellow><green>.</green>");
         } else {
-            final String dataStatus = targetUuid != null ? "(data loaded)" : "(visual only)";
+            final String dataStatus = targetUuid != null && targetDataLoaded ? "(data loaded)" : "(visual only)";
             e.response().reply("<green>Shadow mounted:</green> <yellow>" + e.targetName() + "</yellow> "
                 + (visual ? "<gray>(disguise active)</gray>" : "<red>(visual failed)</red>")
                 + " <gray>" + dataStatus + ". Use</gray> <yellow>/shadow logout</yellow><green>.</green>");
@@ -398,13 +410,20 @@ public final class SessionAuthority {
         db.clearShadow(baseUuid);
 
         // Reload the admin's own profile data (the state they were in before shadowing)
-        dataBridge.loadFromProfile(actor, adminId);
+        final boolean loaded = dataBridge.loadFromProfile(actor, adminId);
+        if (!loaded) {
+            final RuntimeSession rtFallback = runtime(baseUuid);
+            if (rtFallback.preShadowSnapshot() != null) {
+                rtFallback.preShadowSnapshot().applyTo(actor);
+            }
+        }
 
         // Clean up shadow backup now that admin's .dat is restored
         dataBridge.clearShadowBackup(baseUuid);
 
         // Force reconciler to re-apply identity
         final RuntimeSession rt = runtime(baseUuid);
+        rt.preShadowSnapshot(null);
         rt.appliedRuntimeKey(null);
         rt.appliedIdentityKey(null);
     }
@@ -436,6 +455,7 @@ public final class SessionAuthority {
                 if (dataBridge.hasData(session.shadowTargetUuid())) {
                     dataBridge.loadShadowTarget(player, session.shadowTargetUuid());
                 }
+                env.forceSpectator(player);
             }
             engageProtocol(player, session.shadowTarget(), session.shadowSelf(),
                 session.shadowTextureValue(), session.shadowTextureSig());
