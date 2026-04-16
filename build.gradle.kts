@@ -19,7 +19,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
     compileOnly("com.comphenix.protocol:ProtocolLib:5.3.0")
     // SQLite JDBC is bundled with Paper's runtime — no need to shade it.
     // com.mojang.authlib is NOT imported directly — we use Paper's PlayerProfile API
@@ -33,5 +33,5 @@ tasks.processResources {
 }
 
 tasks.runServer {
-    minecraftVersion("1.21.4")
+    minecraftVersion("1.21.11")
 }
