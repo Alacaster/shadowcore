@@ -18,12 +18,55 @@ repositories {
     maven("https://repo.dmulloy2.net/repository/public/")
 }
 
+val protocolLibRuntime by configurations.creating {
+    isTransitive = false
+}
+
 dependencies {
     compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
-    compileOnly("com.comphenix.protocol:ProtocolLib:5.3.0")
+    compileOnly("com.comphenix.protocol:ProtocolLib:+")
+    protocolLibRuntime("com.comphenix.protocol:ProtocolLib:+")
     // SQLite JDBC is bundled with Paper's runtime — no need to shade it.
     // com.mojang.authlib is NOT imported directly — we use Paper's PlayerProfile API
     // which internally handles authlib version differences.
+}
+
+val runServerPluginsDir = layout.buildDirectory.dir("run/plugins")
+
+val installProtocolLibForRunServer by tasks.registering {
+    group = "run paper"
+    description = "Installs the most recent ProtocolLib release for local runServer if missing."
+
+    val protocolLibJar = protocolLibRuntime.elements.map { files ->
+        files
+            .map { it.asFile }
+            .first { it.name.startsWith("ProtocolLib") && it.extension == "jar" }
+    }
+    inputs.files(protocolLibRuntime)
+    outputs.dir(runServerPluginsDir)
+
+    doLast {
+        val pluginsDir = runServerPluginsDir.get().asFile
+        pluginsDir.mkdirs()
+
+        val hasProtocolLib = pluginsDir
+            .listFiles()
+            ?.any { it.isFile && it.name.startsWith("ProtocolLib") && it.extension == "jar" }
+            ?: false
+
+        if (hasProtocolLib) {
+            logger.lifecycle("ProtocolLib already present in ${pluginsDir.absolutePath}; skipping install.")
+            return@doLast
+        }
+
+        val jar = protocolLibJar.get()
+        copy {
+            from(jar)
+            into(pluginsDir)
+        }
+
+        logger.lifecycle("Installed ${jar.name} into ${pluginsDir.absolutePath}.")
+    }
 }
 
 tasks.processResources {
@@ -33,5 +76,6 @@ tasks.processResources {
 }
 
 tasks.runServer {
+    dependsOn(installProtocolLibForRunServer)
     minecraftVersion("1.21.11")
 }
